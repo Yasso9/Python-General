@@ -31,7 +31,7 @@ print(essai.__doc__)
 
 
 
-def question(annonce, essais =4, please ='Oui ou non, s.v.p.!'):
+def question(annonce, essais=4, please ='Oui ou non, s.v.p.!'):
 	while essais >0:
 		reponse = input(annonce)
 		if reponse in ('o', 'oui','O','Oui','OUI'):
