@@ -1,198 +1,152 @@
-#! /usr/bin/env python3
-# coding: utf-8
+#!/usr/bin/env python3
+#-*- coding: utf-8 -*-
+
 import sys
-from exception import ErreurDefinition, DefinitionMultiple, DefinitionManquante, ErreurValeur, ValeurManquante
 
-def isLsystem(caractere):
-    if(caractere == 'a' or caractere == 'b' or caractere == '+' or caractere == '-' or 
-    caractere == '*' or caractere == '[' or caractere == ']'):
-        return True
-    else:
-        return False
+from exception import ErreurDefinition, ErreurValeur, ErreurSynthaxe
+from recuperation_chaine import lecture_definition, lecture_chaine, lecture_regle, lecture_nombre, lecture_nombres
 
-def isRules(caractere):
-    if(isLsystem(caractere) or caractere == '='):
-        return True
-    else:
-        return False
+from enum import Enum
 
-def lecture_axiome(chaine, pos_actuel):
-    while(chaine[pos_actuel].isspace()):
-        if(chaine[pos_actuel] == chaine[-1]):
-            raise ErreurValeur("Il n'y a pas de valeur associé à l'axiome")
-        pos_actuel += 1
+class Lsystem(Enum):
+    "Enumération des definitions du lsystem qui permettent de simplifier le code"
+    AXIOME = 0
+    REGLE = 1
+    ANGLE = 2
+    TAILLE = 3
+    NIVEAU = 4
+    VITESSE = 5
+    COULEUR = 6
+    POSITION = 7
+    EPAISSEUR = 8
 
-    if(chaine[pos_actuel] != '\"'):
-        raise ErreurValeur("La chaine associé à l'axiome doit commencer par des guillemets")
-    pos_actuel += 1
 
-    pos_debut = pos_actuel
-    while(chaine[pos_actuel] != '\"'):
-        if(chaine[pos_actuel] == chaine[-1]):
-            raise ErreurValeur("La chaine associé à l'axiome doit se finir par des guillemets")
-        if(not(isLsystem(chaine[pos_actuel]))):
-            raise ErreurValeur("La chaine associé à l'axiome comporte des caractères non pris en charge")
-        pos_actuel += 1
-    pos_actuel += 1
-    return chaine[pos_debut:pos_actuel-1].strip(), pos_actuel
-
-def lecture_regle(chaine, pos_actuel, regles):
+def enlever_espaces(chaine):
+    "Enleve tout les caractères de type whitespaces dans une chaine"
+    pos_actuel = 0
+    
     while(pos_actuel < len(chaine)):
-        while(chaine[pos_actuel].isspace()):
-            if(chaine[pos_actuel] == chaine[-1]):
-                if(len(regles) == 0):
-                    raise ErreurValeur("Il n'y a pas de valeur associé à la regle")
-                else:
-                    return regles , pos_actuel
+        if(chaine[pos_actuel].isspace()):
+            chaine = chaine[:pos_actuel] + chaine[pos_actuel+1:]
+        else:
             pos_actuel += 1
 
-        if(chaine[pos_actuel] != '\"'):
-            if(len(regles) == 0):
-                raise ErreurValeur("La chaine associé à la règle doit commencer par des guillemets")
-            else:
-                return regles , pos_actuel
-        pos_actuel += 1
+    return chaine
 
-        pos_debut = pos_actuel
-        while(chaine[pos_actuel] != '\"'):
-            if(chaine[pos_actuel] == chaine[-1]):
-                raise ErreurValeur("La chaine associé à la règle doit se fermer par des guillemets")
-            if(not(isRules(chaine[pos_actuel]))):
-                raise ErreurValeur("La chaine associé à la règle comporte des caractères non pris en charge")
-            pos_actuel += 1
 
-        regle = chaine[pos_debut:pos_actuel]
-        if(not(len(regle) >= 3 and (regle[0] == "a" or regle[0] == "b") and regle[1] == "=")):
-            raise ErreurValeur("La synthaxe de la chaine associé à la règle est fausse")
-        regles.append(regle)
-
-        # Le caractere actuel est '\"', on passe au carctère suivant
-        pos_actuel += 1
-
-    return regles, pos_actuel
-
-def lecture_nombre(definition, chaine, pos_actuel):
-    nombre = ""
-    while(chaine[pos_actuel].isdigit() or chaine[pos_actuel].isspace()):
-        nombre += chaine[pos_actuel]
-        if(chaine[pos_actuel] == chaine[-1]):
-            pos_actuel += 1
-            break # On sort de la boucle pour voir ce qu'on va faire
-        pos_actuel += 1
-    # Si nombre ne contient de des "space" alors il y'a une erreur (venant du break forcé ou pas)
-    if(nombre.isspace()):
-        raise ErreurValeur("La valeur associé à {} n'est pas un entier ou est vide".format(definition))
-    # On enlève tout les espace du nombre et on le transforme en entier
-    return int(nombre.strip()), pos_actuel
-
-def lecture_definition(chaine, pos_actuel):
-    # Lecture du premier mot de la ligne (d'une des definitions)
-    pos_debut = pos_actuel
-    # Dès qu'on arrive a la fin du mot on doit normalement avoir le caractère "="
-    while(chaine[pos_actuel] != "="):
-        # Le mot de la definition ne doit pas contenir d'autre caractère que 
-        # les alphanumeric ou des espaces
-        if(not(chaine[pos_actuel].isalpha() or chaine[pos_actuel].isspace())):
-            print("valeur", chaine[pos_actuel])
-            raise ErreurDefinition("Une définition n'est pas valide, elle contient des caractères qui ne sont pas des lettres : '{}'".format(chaine[pos_debut:pos_actuel]))
-        elif(chaine[pos_actuel] == chaine[-1]):
-            print(chaine[pos_debut:pos_actuel])
-            raise ValeurManquante("Signe '=' manquant, une définition n'est pas valide")
-        pos_actuel += 1
-
-    # La position actuel est '=', on passe a celle d'après
-    pos_actuel += 1
-
-    # strip nous permet d'enlever tout les caractères inutile 
-    # comme les espace, tabulation, saut à la ligne
-    # et on met aussi la définition en caractère bas pour pouvoir lire 
-    # tout type de casses concernant la police
-    return chaine[pos_debut:pos_actuel-1].strip().lower(), pos_actuel
-
-def verif_multiple(nbApparition, apparitionMax = 1):
+def verif_multiple(definition, nbApparition, apparitionMax = 1):
     if(nbApparition >= apparitionMax):
-        raise DefinitionMultiple("Une definition est apparu {} fois alors quelle devrais apparatre que {} fois".format(nbApparition+1, apparitionMax))
+        raise ErreurDefinition("La definition {} est apparu {} fois alors quelle ne devrais apparatre que {} fois".format(definition, nbApparition+1, apparitionMax))
     else:
         return nbApparition + 1
 
 def lecture_fichier(chaine):
+    """Fonction principale du script qui s'occupe de lire toute la chaine de caractère et d'affecter aux variables les bonnes valeurs du Lsystem"""
     # Variables du Lsystem
-    axiome = "" # Numero 0 de verif
-    regles = [] # Numero 1 de verif
-    angle = 0 # Numero 2 de verif
-    taille = 0 # Numero 3 de verif
-    niveau = 0 # Numero 4 de verif
+    axiome = ""
+    regles = []
+    angle = 0
+    taille = 20
+    niveau = 0
+    vitesse = 0 # C'est la vitesse la plus rapide
+    couleur = (0, 0, 0) # La couleur sera de type (r, g, b)
+    position = (0, 0)
+    epaisseur = 1
 
-    # Liste qui permet de verifier le nombre de fois que chaque définition va être appeler
-    verif = [0, 0, 0, 0, 0]
+    # Dictionnaire qui permet de verifier le nombre de fois que chaque définition va être appeler
+    # Chaque valeur du dictionnaire est associé à une définition
+    verif = {Lsystem.AXIOME: 0, Lsystem.REGLE: 0, Lsystem.ANGLE: 0, Lsystem.TAILLE: 0, Lsystem.NIVEAU: 0, 
+    Lsystem.VITESSE: 0, Lsystem.COULEUR: 0, Lsystem.POSITION: 0, Lsystem.EPAISSEUR: 0 }
 
     # Position du "curseur" dans lequel on est dans le fichier
     pos_actuel = 0 
 
-    # Les caractères vide au début et à la fin ne nous intérèsse pas
-    chaine = chaine.strip()
+    # Les caractères vide au début et à la fin ne nous intérèsse pas dans le fichier
+    chaine = enlever_espaces(chaine)
 
     # On lit le fichier jusqua la fin
+    # On utilise while et pas un for pour avoir plus de flexibilité
     while pos_actuel < len(chaine):
         definition, pos_actuel = lecture_definition(chaine, pos_actuel) 
+
+        if(pos_actuel >= len(chaine)):
+            raise ErreurSynthaxe("Valeur vide pour la définition : {}".format(definition))
 
         # On effectue les affectations de variables demandé en fonction de la définition
         # Et on vérifie que les definitions ne soit pas déclarer plusieurs fois
         if(definition == "axiome"):
-            axiome, pos_actuel = lecture_axiome(chaine, pos_actuel)
-            verif[0] = verif_multiple(verif[0])
+            axiome, pos_actuel = lecture_chaine(chaine, pos_actuel, "axiome")
+            verif[Lsystem.AXIOME] = verif_multiple(definition, verif[Lsystem.AXIOME])
         elif(definition == "regle" or definition == "regles"):
             regles, pos_actuel = lecture_regle(chaine, pos_actuel, regles)
-            verif[1] = verif_multiple(verif[1], 2) # On peut avoir max 2 règles
+            verif[Lsystem.REGLE] = verif_multiple(definition, verif[Lsystem.REGLE], 2) # On peut avoir max 2 règles
         elif(definition == "angle"):
             angle, pos_actuel = lecture_nombre(definition, chaine, pos_actuel)
-            verif[2] = verif_multiple(verif[2])
+            verif[Lsystem.ANGLE] = verif_multiple(definition, verif[Lsystem.ANGLE])
         elif(definition == "taille"):
             taille, pos_actuel = lecture_nombre(definition, chaine, pos_actuel)
-            verif[3] = verif_multiple(verif[3])
+            verif[Lsystem.TAILLE] = verif_multiple(definition, verif[Lsystem.TAILLE])
         elif(definition == "niveau"):
             niveau, pos_actuel = lecture_nombre(definition, chaine, pos_actuel)
-            verif[4] = verif_multiple(verif[4])
+            verif[Lsystem.NIVEAU] = verif_multiple(definition, verif[Lsystem.NIVEAU])
+        elif(definition == "vitesse"):
+            vitesse, pos_actuel = lecture_nombre(definition, chaine, pos_actuel)
+            verif[Lsystem.VITESSE] = verif_multiple(definition, verif[Lsystem.VITESSE])
+        elif(definition == "couleur"):
+            couleur, pos_actuel = lecture_nombres(definition, chaine, pos_actuel, 3)
+            verif[Lsystem.COULEUR] = verif_multiple(definition, verif[Lsystem.COULEUR])
+        elif(definition == "position"):
+            position, pos_actuel = lecture_nombres(definition, chaine, pos_actuel, 2, True)
+            verif[Lsystem.POSITION] = verif_multiple(definition, verif[Lsystem.POSITION])
+        elif(definition == "epaisseur"):
+            epaisseur, pos_actuel = lecture_nombre(definition, chaine, pos_actuel)
+            verif[Lsystem.EPAISSEUR] = verif_multiple(definition, verif[Lsystem.EPAISSEUR])
         else:
             raise ErreurDefinition("La définition '{}' n'est pas prise en compte : ".format(definition))
 
-    # Si une des définitions important a été oublié
-    if(verif[0] == 0 or verif[2] == 0 or verif[4] == 0):
-        raise DefinitionManquante("Il manque une définition essentiel au l-system")
+    if(verif[Lsystem.AXIOME] == 0):
+        raise ErreurDefinition("Il manque la définition 'axiome' qui doit être obligatoire")
+    elif(verif[Lsystem.ANGLE] == 0):
+        raise ErreurDefinition("Il manque la définition 'angle' qui doit être obligatoire")
+    elif(verif[Lsystem.NIVEAU] == 0):
+        raise ErreurDefinition("Il manque la définition 'niveau' qui doit être obligatoire")
 
-    return axiome, regles, angle, taille, niveau
+    return axiome, regles, angle, taille, niveau, vitesse, couleur, position, epaisseur
     
 def lecture_final(nomfichier):
-    # try:
-    with open(nomfichier, "r") as fichier:
-        chaine = fichier.read()
-        return lecture_fichier(chaine)
-    # except ErreurDefinition:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    # except DefinitionMultiple:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    # except DefinitionManquante:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    # except ErreurValeur:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    # except ValeurManquante:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    # except:
-    #     print("Exception lancé : ", sys.exc_info()[1])
-    return "", [], 0, 0, 0
+    """Gère les erreurs de la fonction lecture_fichier"""
+    try:
+        with open(nomfichier, "r") as fichier:
+            chaine = fichier.read()
+            return lecture_fichier(chaine)
+    except FileNotFoundError:
+        print("Le fichier '{}' n'existe pas dans le repertoire actuel".format(nomfichier))
+    except:
+        print("Exception lancé - {} : {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-if __name__ == "__main__":
-    axiome = ""
-    regles = [] 
-    angle = 0
-    taille = 0
-    niveau = 0
+    # Si rien n'est returner à ce moment là, une exception a été lancé donc on quitte le programme
+    sys.exit()
 
-    axiome, regles, angle, taille, niveau = lecture_final("lsystem.txt")
 
+# Partie qui permet d'utiliser ce scripts séparement si vous voulez verifier sa qualité
+
+def afficher(axiome, regles, angle, taille, niveau, vitesse, couleur, position, epaisseur):
+    "Affiche dans un terminal les variables du Lsystem"
     print("axiome : \"{}\"".format(axiome))
     for regle in regles:
         print("regle : \"{}\"".format(regle))
     print("angle : \"{}\"".format(angle))
     print("taille : \"{}\"".format(taille))
     print("niveau : \"{}\"".format(niveau))
+    print("vitesse : \"{}\"".format(vitesse))
+    print("couleur : \"{}\"".format(couleur))
+    print("position : \"{}\"".format(position))
+    print("epaisseur : \"{}\"".format(epaisseur))
+
+if __name__ == "__main__":
+    # Vous pouvez changez la valeur de la chaine pour pouvoir tester ce que vous voulez
+    chaine = "axiome = 'a-a-a-a' regle = 'a=a+a*a+a+aa*aa+a+a*a+a' 'b=b++' angle = 90.5 taille = 10 niveau = 4 vitesse = 58 couleur = 72, 4, 5 position = -112, -45 epaisseur = 5"
+    print("Chaine de base : {}".format(chaine))
+
+    axiome, regles, angle, taille, niveau, vitesse, couleur, position, epaisseur = lecture_fichier(chaine)
+    afficher(axiome, regles, angle, taille, niveau, vitesse, couleur, position, epaisseur)
